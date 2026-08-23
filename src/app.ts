@@ -207,18 +207,37 @@ app.post(
       values.push(limit);
       values.push(offset);
 
-      const result = await pool.query(
-        query,
-        values
-      );
+     const result = await pool.query(
+      query,
+      values
+    );
 
-      res.json({
-        page,
-        limit,
-        count: result.rowCount,
-        data: result.rows,
-      });
-    } catch (error) {
+    const countQuery = `
+      SELECT COUNT(*) AS total
+      FROM leads
+      WHERE ${whereConditions.join(" AND ")}
+    `;
+
+    const countValues = values.slice(0, -2);
+
+    const countResult = await pool.query(
+      countQuery,
+      countValues
+    );
+
+    const total = Number(countResult.rows[0].total);
+
+    res.json({
+      page,
+      limit,
+      count: result.rowCount,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasNextPage: page * limit < total,
+      hasPreviousPage: page > 1,
+      data: result.rows,
+    });
+  } catch (error) {
       console.error(error);
 
       res.status(500).json({
