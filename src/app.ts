@@ -199,7 +199,7 @@ app.post(
           leads.updated_at
         FROM leads
         WHERE ${whereConditions.join(" AND ")}
-        ORDER BY ${sortColumn} ${sortDirection.toUpperCase()}
+        ORDER BY ${sortColumn} ${sortDirection.toUpperCase()} NULLS LAST
         LIMIT $${paramIndex}
         OFFSET $${paramIndex + 1}
       `;
