@@ -1,10 +1,12 @@
 import { NextFunction, Request, Response } from "express";
+
 import { AuthUser, UserRole } from "../types/auth";
 
 const validRoles: UserRole[] = [
-  "ADMIN",
-  "MANAGER",
-  "AGENT",
+  "owner",
+  "admin",
+  "manager",
+  "agent",
 ];
 
 export const mockAuth = (
@@ -12,9 +14,14 @@ export const mockAuth = (
   res: Response,
   next: NextFunction
 ) => {
-  const tenantId = req.headers["x-tenant-id"] as string | undefined;
-  const userId = req.headers["x-user-id"] as string | undefined;
-  const role = req.headers["x-role"] as UserRole | undefined;
+  const tenantId =
+    req.headers["x-tenant-id"] as string | undefined;
+
+  const userId =
+    req.headers["x-user-id"] as string | undefined;
+
+  const role =
+    req.headers["x-user-role"] as UserRole | undefined;
 
   console.log("Received headers:", {
     tenantId,
