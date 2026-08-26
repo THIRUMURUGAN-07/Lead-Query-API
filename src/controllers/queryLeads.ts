@@ -58,10 +58,11 @@ export const queryLeads = async (
     // BUILD ACCESS CONDITIONS
     // =========================
 
-    const access = buildLeadAccessCondition(
-      req.user!,
-      1,
-    );
+    const access =
+      buildLeadAccessCondition(
+        req.user!,
+        1,
+      );
 
     const whereConditions = [
       ...access.conditions,
@@ -71,7 +72,8 @@ export const queryLeads = async (
       ...access.values,
     ];
 
-    let paramIndex = values.length + 1;
+    let paramIndex =
+      values.length + 1;
 
     // =========================
     // FREE-TEXT SEARCH
@@ -87,7 +89,9 @@ export const queryLeads = async (
         )
       `);
 
-      values.push(`%${q.trim()}%`);
+      values.push(
+        `%${q.trim()}%`,
+      );
 
       paramIndex++;
     }
@@ -103,7 +107,9 @@ export const queryLeads = async (
           paramIndex,
         );
 
-      if (filterResult.conditions.length > 0) {
+      if (
+        filterResult.conditions.length > 0
+      ) {
         whereConditions.push(
           `(${filterResult.conditions.join(
             ` ${logic} `,
@@ -128,7 +134,8 @@ export const queryLeads = async (
       string
     > = {
       createdAt: "leads.created_at",
-      followUpDate: "leads.follow_up_date",
+      followUpDate:
+        "leads.follow_up_date",
     };
 
     const sortColumn =

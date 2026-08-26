@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
-// Mock PostgreSQL pool
+// =========================
+// MOCK DATABASE
+// =========================
+
 vi.mock("../src/db/client", () => ({
   default: {
     query: vi.fn(),
@@ -11,20 +14,31 @@ vi.mock("../src/db/client", () => ({
 import pool from "../src/db/client";
 import app from "../src/app";
 
-const validAuthHeaders = {
-  "x-tenant-id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-  "x-user-id": "a0000000-0000-0000-0000-000000000001",
-  "x-user-role": "admin",
-};
+// =========================
+// TEST CONSTANTS
+// =========================
+
+const TENANT_ID =
+  "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+
+const ADMIN_USER_ID =
+  "a0000000-0000-0000-0000-000000000001";
+
+const AGENT_USER_ID =
+  "agent-user-123";
+
+// =========================
+// TEST SUITE
+// =========================
 
 describe("POST /api/v1/leads/query", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  // =========================================
-  // AUTHENTICATION & AUTHORIZATION
-  // =========================================
+  // =========================
+  // AUTHENTICATION TESTS
+  // =========================
 
   it("should reject a request without authentication headers", async () => {
     const response = await request(app)
@@ -41,8 +55,8 @@ describe("POST /api/v1/leads/query", () => {
   it("should reject a request with an invalid role", async () => {
     const response = await request(app)
       .post("/api/v1/leads/query")
-      .set("x-tenant-id", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-      .set("x-user-id", "a0000000-0000-0000-0000-000000000001")
+      .set("x-tenant-id", TENANT_ID)
+      .set("x-user-id", ADMIN_USER_ID)
       .set("x-user-role", "invalid")
       .send({});
 
@@ -53,14 +67,16 @@ describe("POST /api/v1/leads/query", () => {
     });
   });
 
-  // =========================================
-  // VALIDATION
-  // =========================================
+  // =========================
+  // VALIDATION TESTS
+  // =========================
 
   it("should reject invalid query parameters", async () => {
     const response = await request(app)
       .post("/api/v1/leads/query?sortBy=name")
-      .set(validAuthHeaders)
+      .set("x-tenant-id", TENANT_ID)
+      .set("x-user-id", ADMIN_USER_ID)
+      .set("x-user-role", "admin")
       .send({});
 
     expect(response.status).toBe(400);
@@ -73,11 +89,14 @@ describe("POST /api/v1/leads/query", () => {
   it("should reject an invalid request body", async () => {
     const response = await request(app)
       .post("/api/v1/leads/query")
-      .set(validAuthHeaders)
+      .set("x-tenant-id", TENANT_ID)
+      .set("x-user-id", ADMIN_USER_ID)
+      .set("x-user-role", "admin")
       .send({
         filters: [
           {
-            fieldId: "11111111-1111-1111-1111-111111111111",
+            fieldId:
+              "11111111-1111-1111-1111-111111111111",
             fieldType: "string",
             condition: "invalid condition",
             value: "Chennai",
@@ -92,9 +111,9 @@ describe("POST /api/v1/leads/query", () => {
     );
   });
 
-  // =========================================
-  // SUCCESSFUL LEAD QUERIES
-  // =========================================
+  // =========================
+  // SUCCESS TESTS
+  // =========================
 
   it("should return leads for a valid request", async () => {
     vi.mocked(pool.query)
@@ -114,11 +133,14 @@ describe("POST /api/v1/leads/query", () => {
             total: "1",
           },
         ],
+        rowCount: 1,
       } as any);
 
     const response = await request(app)
       .post("/api/v1/leads/query")
-      .set(validAuthHeaders)
+      .set("x-tenant-id", TENANT_ID)
+      .set("x-user-id", ADMIN_USER_ID)
+      .set("x-user-role", "admin")
       .send({});
 
     expect(response.status).toBe(200);
@@ -126,6 +148,14 @@ describe("POST /api/v1/leads/query", () => {
     expect(response.body).toMatchObject({
       status: "success",
       message: "Leads fetched successfully",
+
+      data: [
+        {
+          id: "lead-1",
+          name: "Ram Kumar",
+          email: "ram@example.com",
+        },
+      ],
 
       meta: {
         page: 1,
@@ -136,14 +166,6 @@ describe("POST /api/v1/leads/query", () => {
         hasPreviousPage: false,
       },
     });
-
-    expect(response.body.data).toEqual([
-      {
-        id: "lead-1",
-        name: "Ram Kumar",
-        email: "ram@example.com",
-      },
-    ]);
 
     expect(pool.query).toHaveBeenCalledTimes(2);
   });
@@ -165,11 +187,14 @@ describe("POST /api/v1/leads/query", () => {
             total: "5",
           },
         ],
+        rowCount: 1,
       } as any);
 
     const response = await request(app)
       .post("/api/v1/leads/query?page=2&limit=2")
-      .set(validAuthHeaders)
+      .set("x-tenant-id", TENANT_ID)
+      .set("x-user-id", ADMIN_USER_ID)
+      .set("x-user-role", "admin")
       .send({});
 
     expect(response.status).toBe(200);
@@ -191,9 +216,9 @@ describe("POST /api/v1/leads/query", () => {
     expect(pool.query).toHaveBeenCalledTimes(2);
   });
 
-  // =========================================
-  // ROLE-BASED ACCESS
-  // =========================================
+  // =========================
+  // AGENT ACCESS TEST
+  // =========================
 
   it("should apply agent access restrictions", async () => {
     vi.mocked(pool.query)
@@ -207,15 +232,13 @@ describe("POST /api/v1/leads/query", () => {
             total: "0",
           },
         ],
+        rowCount: 1,
       } as any);
 
     const response = await request(app)
       .post("/api/v1/leads/query")
-      .set(
-        "x-tenant-id",
-        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-      )
-      .set("x-user-id", "agent-user-123")
+      .set("x-tenant-id", TENANT_ID)
+      .set("x-user-id", AGENT_USER_ID)
       .set("x-user-role", "agent")
       .send({});
 
@@ -235,16 +258,16 @@ describe("POST /api/v1/leads/query", () => {
     );
 
     expect(firstQuery[1]).toEqual([
-      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-      "agent-user-123",
+      TENANT_ID,
+      AGENT_USER_ID,
       20,
       0,
     ]);
   });
 
-  // =========================================
-  // DATABASE ERROR HANDLING
-  // =========================================
+  // =========================
+  // DATABASE ERROR TEST
+  // =========================
 
   it("should return 500 when the database query fails", async () => {
     vi.mocked(pool.query).mockRejectedValueOnce(
@@ -253,7 +276,9 @@ describe("POST /api/v1/leads/query", () => {
 
     const response = await request(app)
       .post("/api/v1/leads/query")
-      .set(validAuthHeaders)
+      .set("x-tenant-id", TENANT_ID)
+      .set("x-user-id", ADMIN_USER_ID)
+      .set("x-user-role", "admin")
       .send({});
 
     expect(response.status).toBe(500);
@@ -263,9 +288,9 @@ describe("POST /api/v1/leads/query", () => {
     });
   });
 
-  // =========================================
-  // SEARCH FUNCTIONALITY
-  // =========================================
+  // =========================
+  // SEARCH TEST
+  // =========================
 
   it("should search across name, phone, email, and e164", async () => {
     vi.mocked(pool.query)
@@ -279,11 +304,14 @@ describe("POST /api/v1/leads/query", () => {
             total: "0",
           },
         ],
+        rowCount: 1,
       } as any);
 
     const response = await request(app)
       .post("/api/v1/leads/query")
-      .set(validAuthHeaders)
+      .set("x-tenant-id", TENANT_ID)
+      .set("x-user-id", ADMIN_USER_ID)
+      .set("x-user-role", "admin")
       .send({
         q: "98765",
       });
@@ -310,7 +338,7 @@ describe("POST /api/v1/leads/query", () => {
     );
 
     expect(firstQuery[1]).toEqual([
-      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      TENANT_ID,
       "%98765%",
       20,
       0,
