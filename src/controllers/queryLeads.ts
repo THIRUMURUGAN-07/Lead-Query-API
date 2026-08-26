@@ -8,10 +8,17 @@ import {
   queryLeadsBodySchema,
 } from "../validation/queryLeads";
 
-export const queryLeads = async (req: Request, res: Response) => {
+export const queryLeads = async (
+  req: Request,
+  res: Response,
+) => {
   try {
-    // Validate query parameters
-    const queryParamsResult = queryParamsSchema.safeParse(req.query);
+    // =========================
+    // VALIDATE QUERY PARAMETERS
+    // =========================
+
+    const queryParamsResult =
+      queryParamsSchema.safeParse(req.query);
 
     if (!queryParamsResult.success) {
       return res.status(400).json({
@@ -20,8 +27,12 @@ export const queryLeads = async (req: Request, res: Response) => {
       });
     }
 
-    // Validate request body
-    const bodyResult = queryLeadsBodySchema.safeParse(req.body);
+    // =========================
+    // VALIDATE REQUEST BODY
+    // =========================
+
+    const bodyResult =
+      queryLeadsBodySchema.safeParse(req.body);
 
     if (!bodyResult.success) {
       return res.status(400).json({
@@ -30,58 +41,114 @@ export const queryLeads = async (req: Request, res: Response) => {
       });
     }
 
-    const { page, limit, sortBy, sortDirection } = queryParamsResult.data;
+    const {
+      page,
+      limit,
+      sortBy,
+      sortDirection,
+    } = queryParamsResult.data;
 
-    const { q, logic = "AND", filters = [] } = bodyResult.data;
+    const {
+      q,
+      logic = "AND",
+      filters = [],
+    } = bodyResult.data;
 
-    // Start with role-based access conditions
-    const access = buildLeadAccessCondition(req.user!, 1);
+    // =========================
+    // BUILD ACCESS CONDITIONS
+    // =========================
 
-    const whereConditions = [...access.conditions];
+    const access = buildLeadAccessCondition(
+      req.user!,
+      1,
+    );
 
-    const values: unknown[] = [...access.values];
+    const whereConditions = [
+      ...access.conditions,
+    ];
+
+    const values: unknown[] = [
+      ...access.values,
+    ];
 
     let paramIndex = values.length + 1;
 
-    // Free-text search
+    // =========================
+    // FREE-TEXT SEARCH
+    // =========================
+
     if (q && q.trim() !== "") {
       whereConditions.push(`
-    (
-      leads.name ILIKE $${paramIndex}
-      OR leads.phone ILIKE $${paramIndex}
-      OR leads.email ILIKE $${paramIndex}
-      OR leads.e164 ILIKE $${paramIndex}
-    )
-  `);
+        (
+          leads.name ILIKE $${paramIndex}
+          OR leads.phone ILIKE $${paramIndex}
+          OR leads.email ILIKE $${paramIndex}
+          OR leads.e164 ILIKE $${paramIndex}
+        )
+      `);
 
       values.push(`%${q.trim()}%`);
+
       paramIndex++;
     }
-    // Build filters
+
+    // =========================
+    // DYNAMIC FILTERS
+    // =========================
+
     if (filters.length > 0) {
-      const filterResult = buildLeadFilterClause(filters, paramIndex);
+      const filterResult =
+        buildLeadFilterClause(
+          filters,
+          paramIndex,
+        );
 
       if (filterResult.conditions.length > 0) {
-        whereConditions.push(`(${filterResult.conditions.join(` ${logic} `)})`);
+        whereConditions.push(
+          `(${filterResult.conditions.join(
+            ` ${logic} `,
+          )})`,
+        );
 
-        values.push(...filterResult.values);
+        values.push(
+          ...filterResult.values,
+        );
 
-        paramIndex = filterResult.nextParamIndex;
+        paramIndex =
+          filterResult.nextParamIndex;
       }
     }
 
-    // Safe sorting map
-    const sortColumns: Record<"createdAt" | "followUpDate", string> = {
+    // =========================
+    // SAFE SORTING
+    // =========================
+
+    const sortColumns: Record<
+      "createdAt" | "followUpDate",
+      string
+    > = {
       createdAt: "leads.created_at",
       followUpDate: "leads.follow_up_date",
     };
 
-    const sortColumn = sortColumns[sortBy];
+    const sortColumn =
+      sortColumns[sortBy];
 
-    // Pagination
-    const offset = (page - 1) * limit;
+    // =========================
+    // PAGINATION
+    // =========================
 
-    const query = `
+    const offset =
+      (page - 1) * limit;
+
+    const whereClause =
+      whereConditions.join(" AND ");
+
+    // =========================
+    // MAIN LEADS QUERY
+    // =========================
+
+    const leadsQuery = `
       SELECT
         leads.id,
         leads.tenant_id,
@@ -96,42 +163,72 @@ export const queryLeads = async (req: Request, res: Response) => {
         leads.created_at,
         leads.updated_at
       FROM leads
-      WHERE ${whereConditions.join(" AND ")}
-      ORDER BY ${sortColumn} ${sortDirection.toUpperCase()} NULLS LAST
+      WHERE ${whereClause}
+      ORDER BY ${sortColumn}
+      ${sortDirection.toUpperCase()}
+      NULLS LAST
       LIMIT $${paramIndex}
       OFFSET $${paramIndex + 1}
     `;
 
-    values.push(limit);
-    values.push(offset);
+    const leadsValues = [
+      ...values,
+      limit,
+      offset,
+    ];
 
-    const result = await pool.query(query, values);
+    const result =
+      await pool.query(
+        leadsQuery,
+        leadsValues,
+      );
+
+    // =========================
+    // COUNT QUERY
+    // =========================
 
     const countQuery = `
       SELECT COUNT(*) AS total
       FROM leads
-      WHERE ${whereConditions.join(" AND ")}
+      WHERE ${whereClause}
     `;
 
-    const countValues = values.slice(0, -2);
+    const countResult =
+      await pool.query(
+        countQuery,
+        values,
+      );
 
-    const countResult = await pool.query(countQuery, countValues);
+    const total = Number(
+      countResult.rows[0].total,
+    );
 
-    const total = Number(countResult.rows[0].total);
+    // =========================
+    // SUCCESS RESPONSE
+    // =========================
 
-    return res.json({
+    return res.status(200).json({
       status: "success",
-      message: "Leads fetched successfully",
+
+      message:
+        "Leads fetched successfully",
 
       data: result.rows,
 
       meta: {
         page,
         limit,
+
         totalRecords: total,
-        totalPages: Math.ceil(total / limit),
-        hasNextPage: page * limit < total,
-        hasPreviousPage: page > 1,
+
+        totalPages:
+          Math.ceil(total / limit),
+
+        hasNextPage:
+          page * limit < total,
+
+        hasPreviousPage:
+          page > 1,
       },
     });
   } catch (error) {
