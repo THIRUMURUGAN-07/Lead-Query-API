@@ -8,14 +8,10 @@ import {
   queryLeadsBodySchema,
 } from "../validation/queryLeads";
 
-export const queryLeads = async (
-  req: Request,
-  res: Response
-) => {
+export const queryLeads = async (req: Request, res: Response) => {
   try {
     // Validate query parameters
-    const queryParamsResult =
-      queryParamsSchema.safeParse(req.query);
+    const queryParamsResult = queryParamsSchema.safeParse(req.query);
 
     if (!queryParamsResult.success) {
       return res.status(400).json({
@@ -25,8 +21,7 @@ export const queryLeads = async (
     }
 
     // Validate request body
-    const bodyResult =
-      queryLeadsBodySchema.safeParse(req.body);
+    const bodyResult = queryLeadsBodySchema.safeParse(req.body);
 
     if (!bodyResult.success) {
       return res.status(400).json({
@@ -35,75 +30,48 @@ export const queryLeads = async (
       });
     }
 
-    const {
-      page,
-      limit,
-      sortBy,
-      sortDirection,
-    } = queryParamsResult.data;
+    const { page, limit, sortBy, sortDirection } = queryParamsResult.data;
 
-    const {
-      q,
-      logic = "AND",
-      filters = [],
-    } = bodyResult.data;
+    const { q, logic = "AND", filters = [] } = bodyResult.data;
 
     // Start with role-based access conditions
-    const access = buildLeadAccessCondition(
-      req.user!,
-      1
-    );
+    const access = buildLeadAccessCondition(req.user!, 1);
 
-    const whereConditions = [
-      ...access.conditions,
-    ];
+    const whereConditions = [...access.conditions];
 
-    const values: unknown[] = [
-      ...access.values,
-    ];
+    const values: unknown[] = [...access.values];
 
     let paramIndex = values.length + 1;
 
     // Free-text search
     if (q && q.trim() !== "") {
       whereConditions.push(`
-        (
-          leads.name ILIKE $${paramIndex}
-          OR leads.email ILIKE $${paramIndex}
-        )
-      `);
+    (
+      leads.name ILIKE $${paramIndex}
+      OR leads.phone ILIKE $${paramIndex}
+      OR leads.email ILIKE $${paramIndex}
+      OR leads.e164 ILIKE $${paramIndex}
+    )
+  `);
 
       values.push(`%${q.trim()}%`);
       paramIndex++;
     }
-
     // Build filters
     if (filters.length > 0) {
-      const filterResult =
-        buildLeadFilterClause(
-          filters,
-          paramIndex
-        );
+      const filterResult = buildLeadFilterClause(filters, paramIndex);
 
       if (filterResult.conditions.length > 0) {
-        whereConditions.push(
-          `(${filterResult.conditions.join(
-            ` ${logic} `
-          )})`
-        );
+        whereConditions.push(`(${filterResult.conditions.join(` ${logic} `)})`);
 
         values.push(...filterResult.values);
 
-        paramIndex =
-          filterResult.nextParamIndex;
+        paramIndex = filterResult.nextParamIndex;
       }
     }
 
     // Safe sorting map
-    const sortColumns: Record<
-      "createdAt" | "followUpDate",
-      string
-    > = {
+    const sortColumns: Record<"createdAt" | "followUpDate", string> = {
       createdAt: "leads.created_at",
       followUpDate: "leads.follow_up_date",
     };
@@ -137,10 +105,7 @@ export const queryLeads = async (
     values.push(limit);
     values.push(offset);
 
-    const result = await pool.query(
-      query,
-      values
-    );
+    const result = await pool.query(query, values);
 
     const countQuery = `
       SELECT COUNT(*) AS total
@@ -150,24 +115,24 @@ export const queryLeads = async (
 
     const countValues = values.slice(0, -2);
 
-    const countResult = await pool.query(
-      countQuery,
-      countValues
-    );
+    const countResult = await pool.query(countQuery, countValues);
 
-    const total = Number(
-      countResult.rows[0].total
-    );
+    const total = Number(countResult.rows[0].total);
 
     return res.json({
-      page,
-      limit,
-      count: result.rowCount,
-      total,
-      totalPages: Math.ceil(total / limit),
-      hasNextPage: page * limit < total,
-      hasPreviousPage: page > 1,
+      status: "success",
+      message: "Leads fetched successfully",
+
       data: result.rows,
+
+      meta: {
+        page,
+        limit,
+        totalRecords: total,
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: page * limit < total,
+        hasPreviousPage: page > 1,
+      },
     });
   } catch (error) {
     console.error(error);
