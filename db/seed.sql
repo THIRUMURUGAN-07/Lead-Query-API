@@ -26,7 +26,7 @@ VALUES (
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     'City',
     'text',
-    TRUE
+    'active'
 );
 
 
@@ -43,7 +43,7 @@ VALUES (
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
     'City',
     'text',
-    TRUE
+    'active'
 );
 
 
